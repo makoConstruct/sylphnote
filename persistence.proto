@@ -1,0 +1,24 @@
+package MakoApp;
+
+message Settings{
+	optional group SystemSettingsMembrane = 1{
+		optional bool whiteRblack = 1 [default = true]; //whether the theme's light rather than dark;
+	}
+}
+message Point{
+	required uint32 x = 1;
+	required uint32 y = 2;
+}
+message Persistence{
+	optional group LastSessionWindowShit =1{
+		optional bool wasMaximizedTall = 1 [default = false];
+		optional bool wasMaximizedWide = 2 [default = false];
+		optional Point size=3;
+		//I wont store location, that's the window manager's discression;
+	}
+	message RecentFile{
+		optional string path=1;
+		optional fixed64 inode=2; //use the latter instead of the former if it's not on an external device, or a symbolic link. yes I'm being overbearing.
+	}
+	repeated RecentFile recentFiles=2;
+}

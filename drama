@@ -1,0 +1,5 @@
+could check if a file is coming from cin, piped input is indistinguishable from user input.
+
+SignalTimeout cannot be permitted to not be connected to anything. Results in segfault on destruction. I think the documentation should assert it. The source sure does.
+
+masking a cairo context's alpha channel seems to kind of.. mask it.. the other way. Instead of lowering the upper limit of opacity it raises the lower limit of transparency. Bizarre.
