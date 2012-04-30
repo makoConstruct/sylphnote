@@ -1,0 +1,10 @@
+dependencies:
+	google's protoc and protocol buffer bindings.
+
+	gtkmm >= 3.0
+
+	a compiler supporting C++11
+
+building:
+	The makefile as it stands is only 6 lines long.
+	The lines mentioning the compiler employed will probably have to be changed, go ahead and check it, you probably don't have g++-4.6 exactly.
