@@ -1,0 +1,6 @@
+LastSessionWindowShit{
+	size{
+		x : 338
+		y : 179
+	}
+}

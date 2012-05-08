@@ -63,6 +63,9 @@ public:
 
    void ClearUndoHistory(void);
 
+   bool isUnmodified();
+   void setUnmodifiedNow();
+
 protected:
    void OnInsert(const Gtk::TextBuffer::iterator &start,
 		 const Glib::ustring &text,
@@ -79,6 +82,7 @@ protected:
    void AddUndoAction(EditAction *action);
    void ResetStack(ActionStack &stack);
 
+   view::EditAction* unmodifiedStateMarker;
    unsigned int mFrozenCnt;
    bool mTryMerge;
    Glib::RefPtr<Gtk::AccelGroup> mAccelGroup;

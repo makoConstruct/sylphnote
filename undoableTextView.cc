@@ -515,7 +515,8 @@ UndoableTextView::UndoableTextView(
    : Gtk::TextView(buffer),
      mFrozenCnt(0),
      mTryMerge(false),
-     mAccelGroup(Gtk::AccelGroup::create())
+     mAccelGroup(Gtk::AccelGroup::create()),
+     unmodifiedStateMarker(NULL)
 {
    get_buffer()->signal_insert().connect(
       sigc::mem_fun(this, &UndoableTextView::OnInsert));
@@ -843,6 +844,19 @@ UndoableTextView::ClearUndoHistory(void)
    ResetStack(mRedoStack);
    undoChangedSignal.emit();
 }
+
+
+
+
+//is for knowing if you must save, like when you save you tell class that is unmodified, and when undo state is like that again class can tell you so;
+
+bool UndoableTextView::isUnmodified(){
+   return ((mUndoStack.empty()?NULL:mUndoStack.top())
+            == unmodifiedStateMarker);
+}
+
+void UndoableTextView::setUnmodifiedNow(){ unmodifiedStateMarker = (mUndoStack.empty()?NULL:mUndoStack.top()); }
+
 
 
 /*
