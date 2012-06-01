@@ -1,3 +1,6 @@
+#ifndef MGTK_OVERLAY
+#define MGTK_OVERLAY
+
 #include <gtkmm.h>
 #include <queue>
 #include <thread>
@@ -22,7 +25,7 @@ protected:
 	sigc::connection pusherLink;
 	float currentAlpha;
 	std::queue<ImageTab*> tabs;
-	unsigned frameTime; //length of a frame in milliseconds;
+	unsigned frameTime; 
 	unsigned currentOpaqueDuration, currentTotalDuration, currentLifetime, currentTransparentPeriod; //lifetime is the amount of ticks it's been up, the others are the number of ticks to endure before transitioning;
 	ImageTab* currentTab;
 	bool draw(Cairo::RefPtr<Cairo::Context> const & cr){
@@ -80,7 +83,8 @@ protected:
 public:
 	unsigned gaps;
 	Gtk::Widget& ward;
-	Overlay(Widget& subject, sigc::signal<void>& frame_update_signal, unsigned frameLength, unsigned edge_gaps = 3):ward(subject),gaps(edge_gaps),frameTime(frameLength),framePusher(frame_update_signal){
+	Overlay(Widget& subject, sigc::signal<void>& frame_update_signal, unsigned frameLength, unsigned edge_gaps = 3)
+		:ward(subject),gaps(edge_gaps),frameTime(frameLength),framePusher(frame_update_signal){ //frametime: length of a frame in milliseconds;
 		ward.signal_draw().connect(sigc::mem_fun(this, &Overlay::draw));
 	}
 	~Overlay(){
@@ -98,3 +102,5 @@ public:
 		return false;
 	}
 };
+
+#endif

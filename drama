@@ -4,4 +4,7 @@ SignalTimeout cannot be permitted to not be connected to nothing. Results in seg
 
 masking a cairo context's alpha channel seems to kind of.. mask it.. the other way. Instead of lowering the upper limit of opacity it raises the lower limit of transparency. Bizarre.
 
-I can't get this menuBar to shut the fuck up so I'm going to not use a menubar. I'll make this searchbox thing, see how that does.
+I can't get this menuBar to shut the fuck up so I'm going to not use a menubar. I'll make this searchbox[actionline] thing, see how that does.
+
+Xapian can't spellcheck and do prefix searches at the same time T__T
+I'm pretty sure it's totally inappropriate for this, and will likely remove it.

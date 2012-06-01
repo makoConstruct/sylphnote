@@ -8,7 +8,9 @@
 #include "SyTextView.cpp"
 #include "SyScrolledWindow.cpp"
 #include "Overlay.cpp"
+#include "ActionLine.cpp"
 #include "persistence.pb.h"
+//#include        "conf.pb.h"
 #ifndef NDEBUG
 	#define warn(x) cerr<<"warning: "<<x<<'\n'
 #else
@@ -24,11 +26,14 @@ class SyWindow;
 namespace appglobal{
 	const string appname = "sylphnote";
 	const string memoryFilePath = "persistence";
+	const string configurationFilePath = "config";
 	unsigned const defaultWindowWidth = 800;
 	unsigned const defaultWindowHeight = 400;
 	MakoApp::Persistence persistence;
 	namespace icon{
+		 Cairo::RefPtr<Cairo::ImageSurface> failFlash;
 		Cairo::RefPtr<Cairo::ImageSurface> save;
+		Cairo::RefPtr<Cairo::ImageSurface> dontBotherSave;
 		Cairo::RefPtr<Cairo::ImageSurface> saveDifferent;
 		Cairo::RefPtr<Cairo::ImageSurface> saveOver;
 		Cairo::RefPtr<Cairo::ImageSurface> saveFail;
@@ -39,7 +44,6 @@ namespace appglobal{
 		Cairo::RefPtr<Cairo::ImageSurface> fromStdin;
 		Cairo::RefPtr<Cairo::ImageSurface> didNotSave;
 	}
-	bool fileHasChanged = false;
 	bool fromStdin=false;
 	bool toStdout=false;
 	Overlay* ov;
@@ -47,22 +51,22 @@ namespace appglobal{
 	string destFileName; //a feature that probably wont get used by the user;
 	ostream* out=NULL;
 	RefPtr<TextBuffer> buff; //is here for saveOrWhatever and isItCoolToQuit;
-	SyTextView* textview;
+	SyTextView* textView;
 	SyWindow* window;
 	Menu* menu;
 }
 
 bool isItCoolToQuit(){ //quits if there's no reason not to.
-	return (appglobal::textview->isUnmodified()) || (appglobal::buff->get_char_count()==0);
+	return (appglobal::textView->isUnmodified()) || (appglobal::buff->get_char_count()==0);
 }
 
-void shortFlash(Cairo::RefPtr<Cairo::ImageSurface>& image){ //warning, depends on ov being initialized;
+void shortFlash(Cairo::RefPtr<Cairo::ImageSurface>& image){ //warning, depends on appglobal::ov being initialized;
 	appglobal::ov->flash(image, chrono::duration_cast<Overlay::Duration>(chrono::milliseconds(520)), chrono::duration_cast<Overlay::Duration>(chrono::milliseconds(600)));
 }
-void longishFlash(Cairo::RefPtr<Cairo::ImageSurface>& image){ //warning, depends on ov being initialized;
+void longishFlash(Cairo::RefPtr<Cairo::ImageSurface>& image){ //warning, depends on appglobal::ov being initialized;
 	appglobal::ov->flash(image, chrono::duration_cast<Overlay::Duration>(chrono::milliseconds(1200)), chrono::duration_cast<Overlay::Duration>(chrono::milliseconds(800)));
 }
-void longFlash(Cairo::RefPtr<Cairo::ImageSurface>& image){ //warning, depends on ov being initialized;
+void longFlash(Cairo::RefPtr<Cairo::ImageSurface>& image){ //warning, depends on appglobal::ov being initialized;
 	appglobal::ov->flash(image, chrono::duration_cast<Overlay::Duration>(chrono::milliseconds(2000)), chrono::duration_cast<Overlay::Duration>(chrono::milliseconds(1000)));
 }
 
@@ -74,19 +78,29 @@ protected:
 		MakoApp::Point* size = appglobal::persistence.mutable_lastsessionwindowshit()->mutable_size();
 		size->set_x(x);  size->set_y(y);
 	}
+	bool forcedQuit;
+	void forbitQuitAgain(){
+		forcedQuit=false;
+	}
 	virtual bool on_delete_event(GdkEventAny* event){
 		if((isItCoolToQuit())){
 			return false;
 		}else{
-			shortFlash(appglobal::icon::didNotSave);
-			return true;
+			if(forcedQuit){
+				return false;
+			}else{
+				forcedQuit=true;
+				Glib::signal_timeout().connect_once(   sigc::mem_fun(this, &SyWindow::forbitQuitAgain),   3500);
+				shortFlash(appglobal::icon::didNotSave);
+				return true;
+			}
 		}
 	}
 	virtual void on_hide(){
 		windowDestruct();
 	}
 public:
-	SyWindow():Window(){
+	SyWindow():Window(),forcedQuit(false){
 		set_has_resize_grip(false);
 	}
 };
@@ -135,40 +149,36 @@ void saveAs(){
 	string data = appglobal::buff->get_text();
 	Cairo::RefPtr<Cairo::ImageSurface>* image=NULL;
 	bool didsave = saveAsAction(data, image);
-	
 	if(image) shortFlash(*image);
 	if(appglobal::toStdout){
 		cout << data;
 		shortFlash(appglobal::icon::toStdout);
 	}
-	if(appglobal::toStdout || didsave)   appglobal::textview->setUnmodifiedNow();
+	if(appglobal::toStdout || didsave)   appglobal::textView->setUnmodifiedNow();
 }
 
 void saveOrWhatever(){
 	using namespace appglobal;
 	Cairo::RefPtr<Cairo::ImageSurface>* image=NULL;
-	string data = buff->get_text();
-	if(!destFileName.empty()){
-		ofstream outFile(destFileName, ios_base::out|ios_base::trunc);
-		bool savedOver = outFile.is_open();
-		outFile << data;
-		image = &icon::save;
+	if(textView->isUnmodified() && !sourceFileName.empty()){ //if there's no source file backing things the user will still expect you to put something there;
+		image = & icon::dontBotherSave;
 	}else{
-		if(!sourceFileName.empty()){
-			ofstream outFile(sourceFileName, ios_base::out|ios_base::trunc);
+		string data = buff->get_text();
+		if(!destFileName.empty()){
+			ofstream outFile(destFileName, ios_base::out|ios_base::trunc);
 			outFile << data;
 			image = &icon::save;
-			textview->setUnmodifiedNow();
-		}else if(!toStdout){//where do you want it to go, then?
-			if(saveAsAction(data, image))   textview->setUnmodifiedNow();
+			textView->setUnmodifiedNow();
+		}else if(!toStdout){ //where do you want it to go, then?
+			if(saveAsAction(data, image))   textView->setUnmodifiedNow();
 		}
 	}
 	
 	if(image) shortFlash(*image);
 	if(toStdout){
-		cout << data;
+		cout << buff->get_text();
 		shortFlash(icon::toStdout);
-		textview->setUnmodifiedNow();
+		textView->setUnmodifiedNow();
 	}
 }
 
@@ -206,6 +216,7 @@ int main(int argc, char** argv){
 			}
 		}
 	}}
+	if(!appglobal::sourceFileName.empty() && appglobal::destFileName.empty()) appglobal::destFileName = appglobal::sourceFileName; //save to destFileName only;
 	
 	//deserialize the persistece data;
 	ifstream persistenceRead(appglobal::memoryFilePath, ios_base::in|ios_base::binary);
@@ -269,86 +280,91 @@ int main(int argc, char** argv){
 	}
 	window.set_title(appglobal::appname);
 	
-	appglobal::icon::save = Cairo::ImageSurface::create_from_png("saveIcon.png");
-	appglobal::icon::saveFail = Cairo::ImageSurface::create_from_png("saveFail.png");
-	appglobal::icon::saveOver = Cairo::ImageSurface::create_from_png("saveOver.png");
-	appglobal::icon::saveDifferent = appglobal::icon::save;
-	appglobal::icon::toStdout = Cairo::ImageSurface::create_from_png("toStdout.png");
-	appglobal::icon::saveWtf = Cairo::ImageSurface::create_from_png("saveWtf.png");
-	appglobal::icon::open = Cairo::ImageSurface::create_from_png("openIcon.png");
-	appglobal::icon::newFile = Cairo::ImageSurface::create_from_png("newFile.png");
-	appglobal::icon::fromStdin = Cairo::ImageSurface::create_from_png("fromStdin.png");
-	appglobal::icon::didNotSave = Cairo::ImageSurface::create_from_png("didnotSaveIcon.png");
+	{using namespace appglobal::icon;
+	 failFlash = Cairo::ImageSurface::create_from_png("failFlash.png");
+	save = Cairo::ImageSurface::create_from_png("saveIcon.png");
+	saveFail = Cairo::ImageSurface::create_from_png("saveFail.png");
+	saveOver = Cairo::ImageSurface::create_from_png("saveOver.png");
+	dontBotherSave = save;
+	saveDifferent = save;
+	toStdout = Cairo::ImageSurface::create_from_png("toStdout.png");
+	saveWtf = Cairo::ImageSurface::create_from_png("saveWtf.png");
+	open = Cairo::ImageSurface::create_from_png("openIcon.png");
+	newFile = Cairo::ImageSurface::create_from_png("newFile.png");
+	fromStdin = Cairo::ImageSurface::create_from_png("fromStdin.png");
+	didNotSave = Cairo::ImageSurface::create_from_png("didnotSaveIcon.png");
+	}
 	
 	auto accelGroup = AccelGroup::create();
-	#ifdef SY_MENUBAR_ENABLED
-	Menu subMenu; subMenu.set_take_focus(false); appglobal::menu = &subMenu;
-	MenuItem mainM("_main",true);
-	mainM.set_submenu(subMenu);
-	#endif
-	SyTextView textview(appglobal::buff); textview.set_wrap_mode(WRAP_WORD_CHAR);
-	appglobal::textview = &textview;
-	
+	unsigned animationFrameTime = 16; //milliseconds;
+	SyTextView textView(appglobal::buff); textView.set_wrap_mode(WRAP_WORD_CHAR);
+	appglobal::textView = &textView;
+	Glib::signal_timeout().connect(sigc::ptr_fun(framePush), animationFrameTime);
+	auto entryBuffer = EntryBuffer::create();
+	ActionLine actionLine(entryBuffer, "actionSearchDB", framePusher, animationFrameTime, appglobal::icon::failFlash, &textView);
+
+		const string toActionLinePath = "<main>/main/toActionLine";
+		auto toActionLineAction = Action::create("shift focus to actionLine", Stock::OK, "toAction_Line");
+		toActionLineAction->signal_activate().connect(sigc::mem_fun(&actionLine, &ActionLine::grab_focus));
+		toActionLineAction->set_accel_path(toActionLinePath); toActionLineAction->set_accel_group(accelGroup);
+		Gtk::AccelMap::add_entry(toActionLinePath, GDK_KEY_l, Gdk::MOD1_MASK);
+		toActionLineAction->connect_accelerator();
+		//unregistered;
+		
 		const string quitPath = "<main>/main/quit";
-		auto quitAction = Action::create("quit", Stock::QUIT, "just _Quit"); quitAction->signal_activate().connect(sigc::ptr_fun(quit)); quitAction->set_accel_path(quitPath); quitAction->set_accel_group(accelGroup);
+		auto quitAction = Action::create("quit", Stock::QUIT, "just _Quit");
+		quitAction->signal_activate().connect(sigc::ptr_fun(quit));
+		quitAction->set_accel_path(quitPath);
+		quitAction->set_accel_group(accelGroup);
 		Gtk::AccelMap::add_entry(quitPath, GDK_KEY_q, Gdk::CONTROL_MASK);
 		quitAction->connect_accelerator();
-		#ifdef SY_MENUBAR_ENABLED
-		ImageMenuItem quitI(Stock::QUIT); quitI.set_accel_path(quitPath); quitI.set_related_action(quitAction);
-		subMenu.append(quitI);
-		#endif
-		
+		actionLine.actionsearcher.reg(AID::quit, quitAction);
+
 		const string saveAsPath = "<main>/main/saveAs";
-		auto saveAsAction = Action::create("save as", Stock::SAVE, "save _as"); saveAsAction->signal_activate().connect(sigc::ptr_fun(saveAs)); saveAsAction->set_accel_path(saveAsPath); saveAsAction->set_accel_group(accelGroup);
+		auto saveAsAction = Action::create("save as", Stock::SAVE, "save _as");
+		saveAsAction->signal_activate().connect(sigc::ptr_fun(saveAs));
+		saveAsAction->set_accel_path(saveAsPath);
+		saveAsAction->set_accel_group(accelGroup);
 		Gtk::AccelMap::add_entry(saveAsPath, GDK_KEY_s, Gdk::CONTROL_MASK|Gdk::SHIFT_MASK);
 		saveAsAction->connect_accelerator();
-		#ifdef SY_MENUBAR_ENABLED
-		ImageMenuItem saveAsI(Stock::SAVE_AS); saveAsI.set_accel_path(saveAsPath); saveAsI.set_related_action(saveAsAction);
-		subMenu.append(saveAsI);
-		#endif
-		
+		actionLine.actionsearcher.reg(AID::saveAs, saveAsAction);
+
 		const string savePath = "<main>/main/save";
-		auto saveAction = Action::create("save", Stock::SAVE, "_save"); saveAction->signal_activate().connect(sigc::ptr_fun(saveOrWhatever)); saveAction->set_accel_path(savePath); saveAction->set_accel_group(accelGroup);
+		auto saveAction = Action::create("save", Stock::SAVE, "_save");
+		saveAction->signal_activate().connect(sigc::ptr_fun(saveOrWhatever));
+		saveAction->set_accel_path(savePath);
+		saveAction->set_accel_group(accelGroup);
 		Gtk::AccelMap::add_entry(savePath, GDK_KEY_s, Gdk::CONTROL_MASK);
 		saveAction->connect_accelerator();
-		#ifdef SY_MENUBAR_ENABLED
-		ImageMenuItem saveI(Stock::SAVE); saveI.set_accel_path(savePath); saveI.set_related_action(saveAction);
-		subMenu.append(saveI);
-		#endif
-		
+		actionLine.actionsearcher.reg(AID::save, saveAction);
+
 		const string undoPath = "<main>/main/undo";
-		auto undoAction = Action::create("undo", Stock::UNDO, "_undo"); undoAction->signal_activate().connect(sigc::mem_fun(&textview, &view::UndoableTextView::Undo)); undoAction->set_accel_path(undoPath); undoAction->set_accel_group(accelGroup);
+		auto undoAction = Action::create("undo", Stock::UNDO, "_undo");
+		undoAction->signal_activate().connect(sigc::mem_fun(&textView, &view::UndoableTextView::Undo));
+		undoAction->set_accel_path(undoPath);
+		undoAction->set_accel_group(accelGroup);
 		Gtk::AccelMap::add_entry(undoPath, GDK_KEY_z, Gdk::CONTROL_MASK);
 		undoAction->connect_accelerator();
-		#ifdef SY_MENUBAR_ENABLED
-		ImageMenuItem undoI(Stock::UNDO); undoI.set_accel_path(undoPath); undoI.set_related_action(undoAction);
-		subMenu.append(undoI);
-		#endif
-		
+		actionLine.actionsearcher.reg(AID::undo, undoAction);
+
 		const string redoPath = "<main>/main/redo";
-		auto redoAction = Action::create("redo", Stock::REDO, "_redo"); redoAction->signal_activate().connect(sigc::mem_fun(&textview, &view::UndoableTextView::Redo)); redoAction->set_accel_path(redoPath); redoAction->set_accel_group(accelGroup);
+		auto redoAction = Action::create("redo", Stock::REDO, "_redo");
+		redoAction->signal_activate().connect(sigc::mem_fun(&textView, &view::UndoableTextView::Redo));
+		redoAction->set_accel_path(redoPath);
+		redoAction->set_accel_group(accelGroup);
 		Gtk::AccelMap::add_entry(redoPath, GDK_KEY_z, Gdk::CONTROL_MASK | Gdk::SHIFT_MASK);
 		redoAction->connect_accelerator();
-		#ifdef SY_MENUBAR_ENABLED
-		ImageMenuItem redoI(Stock::REDO); redoI.set_accel_path(redoPath); redoI.set_related_action(redoAction);
-		subMenu.append(redoI);
-		#endif
-	#ifdef SY_MENUBAR_ENABLED
-	MenuBar menuBar; menuBar.append(mainM); menuBar.set_take_focus(false);
-	#endif
+		actionLine.actionsearcher.reg(AID::redo, redoAction);
 	Box box; box.set_orientation(ORIENTATION_VERTICAL); box.set_homogeneous(false);// grid.set_resize_mode(RESIZE_PARENT);
 	SyScrolledWindow syv; syv.set_policy(POLICY_AUTOMATIC, POLICY_AUTOMATIC);
-	unsigned animationFrameTime = 16; //milliseconds;
-	Glib::signal_timeout().connect(sigc::ptr_fun(framePush), animationFrameTime);
-	Overlay ov(textview, framePusher, animationFrameTime); appglobal::ov = &ov;
+	Overlay ov(textView, framePusher, animationFrameTime); appglobal::ov = &ov;
 	longFlash(*openImage);
-	syv.add(textview);
-	#ifdef SY_MENUBAR_ENABLED
-	box.pack_start(menuBar,false,true);
-	#endif
+	syv.add(textView);
+	box.pack_start(actionLine,false,true);
 	box.pack_start(syv,true,true);
 	window.add(box);
 	window.add_accel_group(accelGroup);
+	textView.grab_focus();
 	window.show_all();
 	mein.run(window);
 	
